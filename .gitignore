@@ -24,3 +24,15 @@ dist-ssr
 *.sw?
 
 .env
+cloudflared.exe
+*.exe
+
+# Android
+.gradle/
+android/.gradle/
+android/.kotlin/
+android/build/
+android/*/build/
+android/local.properties
+*.apk
+*.aab

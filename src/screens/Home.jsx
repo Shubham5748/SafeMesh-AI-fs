@@ -6,10 +6,10 @@ export default function Home({ onSosTrigger, onOpenMap }) {
     <div className="home-screen screen-content">
       <header className="header">
         <div>
-          <h2 className="greeting">Hello, Alex</h2>
+          <h2 className="greeting">Hello, Shubham</h2>
           <p className="status text-green">Safe & Protected</p>
         </div>
-        <div className="avatar">A</div>
+        <div className="avatar">S</div>
       </header>
 
       <div className="status-grid">

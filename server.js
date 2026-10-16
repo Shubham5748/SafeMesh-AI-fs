@@ -9,6 +9,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Minimal safe request logger: logs method and path only
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.originalUrl || req.url}`);
+  next();
+});
+
 const PORT = process.env.PORT || 3001;
 
 // Initialize Twilio client if credentials are provided
@@ -34,7 +41,12 @@ app.get('/api/health', (req, res) => {
 app.post('/api/emergency', async (req, res) => {
   const { contacts, reason, userName, location } = req.body;
 
+  const contactCount = Array.isArray(contacts) ? contacts.length : 0;
+  const hasCoordinates = Boolean(location && location.latitude && location.longitude);
+  console.log(`[SOS-HANDLER] Incoming SOS dispatch | Contacts: ${contactCount} | Reason: "${reason || 'Unknown'}" | Has GPS: ${hasCoordinates}`);
+
   if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
+    console.warn('[SOS-HANDLER] Rejected: No emergency contacts provided');
     return res.status(400).json({ error: 'No emergency contacts provided' });
   }
 
@@ -90,10 +102,10 @@ app.post('/api/emergency', async (req, res) => {
     });
   }
 
-  console.log(`\n🚨 REAL SOS DISPATCHED:`);
-  console.log(`Reason: ${emergencyReason}`);
-  console.log(`Location: ${locString}`);
-  console.log(`Target Phone(s): ${contacts.map(c => c.phone).join(', ')}\n`);
+  console.log(`\n🚨 SOS DISPATCH INITIATED:`);
+  console.log(`- Reason: ${emergencyReason}`);
+  console.log(`- Coordinates attached: ${!!(location && location.latitude && location.longitude)}`);
+  console.log(`- Total recipient contacts: ${contacts.length}`);
 
   // Real Twilio Dispatch
   for (const contact of contacts) {
@@ -101,21 +113,10 @@ app.post('/api/emergency', async (req, res) => {
     if (phone.length === 10) {
       phone = `+91${phone}`; // Assume India if 10 digits
     }
+    const maskedPhone = phone.length > 4 ? `${phone.substring(0, 3)}***${phone.substring(phone.length - 2)}` : '***';
     const result = { name: contact.name, phone, error: null };
 
-    try {
-      const smsRes = await twilioClient.messages.create({
-        body: smsMessage,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: phone
-      });
-      result.smsSID = smsRes.sid;
-      smsSent++;
-    } catch (err) {
-      console.error(`SMS failed for ${phone}:`, err.message);
-      result.error = (result.error || '') + 'SMS failed. ';
-    }
-
+    // 1. Voice Call Dispatch
     try {
       const callRes = await twilioClient.calls.create({
         url: process.env.TWILIO_TWIML_URL || 'http://demo.twilio.com/docs/voice.xml',
@@ -124,9 +125,25 @@ app.post('/api/emergency', async (req, res) => {
       });
       result.callSID = callRes.sid;
       callsSent++;
+      console.log(`[DISPATCH-CALL] SUCCESS -> Recipient (${maskedPhone}) | SID: ${callRes.sid}`);
     } catch (err) {
-      console.error(`Call failed for ${phone}:`, err.message);
-      result.error = (result.error || '') + 'Call failed.';
+      console.error(`[DISPATCH-CALL] FAILED  -> Recipient (${maskedPhone}) | Reason: ${err.message}`);
+      result.error = (result.error || '') + 'Call failed. ';
+    }
+
+    // 2. SMS Dispatch
+    try {
+      const smsRes = await twilioClient.messages.create({
+        body: smsMessage,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: phone
+      });
+      result.smsSID = smsRes.sid;
+      smsSent++;
+      console.log(`[DISPATCH-SMS]  SUCCESS -> Recipient (${maskedPhone}) | SID: ${smsRes.sid}`);
+    } catch (err) {
+      console.error(`[DISPATCH-SMS]  FAILED  -> Recipient (${maskedPhone}) | Reason: ${err.message}`);
+      result.error = (result.error || '') + 'SMS failed. ';
     }
 
     results.push(result);

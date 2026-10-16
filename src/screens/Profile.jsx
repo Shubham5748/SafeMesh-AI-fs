@@ -8,7 +8,7 @@ export default function Profile({ onOpenContacts }) {
         <div className="profile-avatar-large">
           <User size={48} />
         </div>
-        <h2 className="title mt-4">Alex Chen</h2>
+        <h2 className="title mt-4">Shubham Chaubey</h2>
         <p className="subtitle">Premium Member</p>
       </header>
 
